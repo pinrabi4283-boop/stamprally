@@ -1,3 +1,4 @@
+<!-- ...existing code... -->
 <!DOCTYPE html>
 <html>
   <head>
@@ -50,13 +51,245 @@
 
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
     <script>
-      // 既存のスクリプトをそのまま使う（SHEET_API_URL を最新に）
       const SHEET_API_URL = 'https://script.google.com/macros/s/AKfycbyWbPWbE0EVAFjTtp9PhNQe92TmvDRhJ45PnDraSmCsO9VSyqrsGGW4f8R-INWGpZlO/exec';
-      // 以降は既存のロジック（省略）...
-      // 小さな改善点:
-      //  - getUserMedia のオプションで背面カメラ優先:
-      //      { video: { facingMode: { ideal: "environment" } } }
-      //  - 停止ボタンを追加してカメラ停止を即時行う
+      const STORAGE_KEY = 'web-stamprally-collected';
+      const PARTICIPANT_KEY = 'web-stamprally-participantId';
+      const video = document.getElementById('video');
+      const canvas = document.getElementById('canvas');
+      const ctx = canvas.getContext('2d');
+      const message = document.getElementById('message');
+      const participantMessage = document.getElementById('participant-message');
+      const stampList = document.getElementById('stamp-list');
+      const special = document.getElementById('special');
+      const participantSelect = document.getElementById('participantSelect');
+      const scanButton = document.getElementById('scanButton');
+      const stopButton = document.getElementById('stopButton');
+      let stream;
+
+      let allStamps = [];
+      let allQrCodes = [];
+      let allParticipants = [];
+      let collectedByParticipant = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+      if (typeof collectedByParticipant !== 'object' || collectedByParticipant === null) {
+        collectedByParticipant = {};
+      }
+      let currentParticipantId = localStorage.getItem(PARTICIPANT_KEY) || '';
+      let collected = [];
+
+      scanButton.addEventListener('click', startScan);
+      stopButton.addEventListener('click', stopScan);
+      participantSelect.addEventListener('change', () => setParticipant(participantSelect.value));
+
+      loadStampData();
+
+      async function loadStampData() {
+        try {
+          const res = await fetch(SHEET_API_URL);
+          const data = await res.json();
+          allStamps = data.stamps || [];
+          allQrCodes = data.qrCodes || [];
+          allParticipants = data.participants || [];
+          fillParticipantSelect();
+          updateStampList();
+        } catch (error) {
+          message.textContent = 'スタンプデータの読み込みに失敗しました。';
+        }
+      }
+
+      function fillParticipantSelect() {
+        participantSelect.innerHTML = '';
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '';
+        defaultOption.textContent = '-- 参加者を選択 --';
+        participantSelect.appendChild(defaultOption);
+
+        allParticipants.forEach(participant => {
+          const id = String(participant.participantId || participant.id || participant.ID || '');
+          const name = participant.name || participant.Name || participant.名前 || '';
+          if (!id) return;
+          const option = document.createElement('option');
+          option.value = id;
+          option.textContent = name ? `${name} (${id})` : id;
+          participantSelect.appendChild(option);
+        });
+
+        if (currentParticipantId) participantSelect.value = currentParticipantId;
+        setParticipant(currentParticipantId, false);
+      }
+
+      function setParticipant(id, save = true) {
+        currentParticipantId = id || '';
+        if (save) localStorage.setItem(PARTICIPANT_KEY, currentParticipantId);
+        collected = collectedByParticipant[currentParticipantId] || [];
+        participantMessage.textContent = currentParticipantId ? `現在の参加者: ${getParticipantName(currentParticipantId)}` : '参加者を選んでください。';
+        updateStampList();
+      }
+
+      function getParticipantName(id) {
+        const p = allParticipants.find(item => String(item.participantId || item.id || item.ID) === id);
+        return p ? (p.name || p.Name || p.名前 || '') : '';
+      }
+
+      function getParticipantBookCode(id) {
+        const p = allParticipants.find(item => String(item.participantId || item.id || item.ID) === id);
+        return p ? (p.bookCode || p.book_code || '') : '';
+      }
+
+      function saveCollected() {
+        if (!currentParticipantId) return;
+        collectedByParticipant[currentParticipantId] = collected;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(collectedByParticipant));
+      }
+
+      function normalizeField(obj, names) {
+        for (const n of names) {
+          if (obj[n] !== undefined && obj[n] !== '') return obj[n];
+        }
+        return '';
+      }
+
+      function updateStampList() {
+        stampList.innerHTML = '';
+        if (!allStamps.length) {
+          stampList.textContent = 'スタンプデータがまだ読み込まれていません。';
+          return;
+        }
+        allStamps.forEach(stamp => {
+          const id = String(normalizeField(stamp, ['stampId','id','ID']));
+          const item = document.createElement('div');
+          item.className = 'stamp' + (collected.includes(id) ? ' collected' : '');
+          item.innerHTML = `
+            <strong>${normalizeField(stamp, ['name','Name','名前'])}</strong>
+            <div>${normalizeField(stamp, ['description','Description','説明'])}</div>
+            ${normalizeField(stamp, ['image','Image','画像']) ? `<img src="${normalizeField(stamp, ['image','Image','画像'])}" alt="${normalizeField(stamp, ['name','Name','名前'])}">` : ''}
+            <div>${collected.includes(id) ? '取得済み' : '未取得'}</div>
+          `;
+          stampList.appendChild(item);
+        });
+
+        if (collected.length === allStamps.length && allStamps.length > 0) {
+          special.innerHTML = '<h3>おめでとう！ 全て集めました！</h3><img src="https://via.placeholder.com/600x300?text=スペシャル画像" alt="スペシャル画像" style="width:100%;max-width:600px;border-radius:8px;">';
+        } else {
+          special.innerHTML = '';
+        }
+      }
+
+      async function startScan() {
+        message.textContent = 'カメラを起動しています…';
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } } });
+          video.srcObject = stream;
+          await video.play();
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          requestAnimationFrame(scanFrame);
+        } catch (err) {
+          message.textContent = 'カメラの起動に失敗しました。';
+        }
+      }
+
+      function scanFrame() {
+        if (!stream) return;
+        if (video.readyState !== video.HAVE_ENOUGH_DATA) {
+          requestAnimationFrame(scanFrame);
+          return;
+        }
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height);
+        if (code) {
+          stopScan();
+          handleQrCode(code.data.trim());
+          return;
+        }
+        requestAnimationFrame(scanFrame);
+      }
+
+      function stopScan() {
+        if (stream) {
+          stream.getTracks().forEach(t => t.stop());
+          stream = null;
+        }
+        video.srcObject = null;
+      }
+
+      async function handleQrCode(value) {
+        message.textContent = 'QRを読み取りました: ' + value;
+        const parsed = parseQrValue(value);
+
+        // 本の管理コード（bookCode）または participantId が来たら参加者設定
+        const participantMatch = allParticipants.find(p => {
+          const id = String(p.participantId || p.id || p.ID || '');
+          const bookCode = String(p.bookCode || p.book_code || '');
+          return id === parsed || bookCode === parsed;
+        });
+        if (participantMatch) {
+          const id = String(participantMatch.participantId || participantMatch.id || participantMatch.ID);
+          setParticipant(id);
+          message.textContent = `参加者が設定されました: ${getParticipantName(id)}`;
+          return;
+        }
+
+        if (!currentParticipantId) {
+          message.textContent = '参加者が設定されていません。本の管理コードを先に読み取ってください。';
+          return;
+        }
+
+        const qrId = parsed;
+        const qrItem = allQrCodes.find(item => String(normalizeField(item, ['qrId','id','ID'])) === qrId);
+        if (!qrItem) {
+          message.textContent = 'このQRコードは登録されていません。';
+          return;
+        }
+        const stampId = String(normalizeField(qrItem, ['stampId','stampID','stamp_id']));
+        const stamp = allStamps.find(item => String(normalizeField(item, ['stampId','id','ID'])) === stampId);
+        if (!stamp) {
+          message.textContent = 'このQRコードに対応するスタンプが見つかりません。';
+          return;
+        }
+
+        if (!collected.includes(stampId)) {
+          collected.push(stampId);
+          saveCollected();
+          updateStampList();
+        }
+
+        const bookCode = getParticipantBookCode(currentParticipantId) || '';
+        message.textContent = `スタンプ「${normalizeField(stamp, ['name','Name','名前'])}」を取得しました。Googleマップを開きます。`;
+        await postHistory({ participantId: currentParticipantId, bookCode, qrId, stampId });
+        openMap(stamp);
+      }
+
+      function parseQrValue(value) {
+        try {
+          const url = new URL(value);
+          return url.searchParams.get('bookCode') || url.searchParams.get('qrId') || url.searchParams.get('id') || url.pathname.split('/').pop();
+        } catch {
+          return value;
+        }
+      }
+
+      function openMap(stamp) {
+        const lat = normalizeField(stamp, ['lat','Lat','latitude','Latitude']);
+        const lng = normalizeField(stamp, ['lng','Lng','longitude','Longitude']);
+        if (lat && lng) {
+          const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(lat + ',' + lng)}`;
+          window.open(url, '_blank');
+        }
+      }
+
+      async function postHistory(body) {
+        try {
+          await fetch(SHEET_API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          });
+        } catch (error) {
+          console.warn('履歴保存に失敗しました', error);
+        }
+      }
     </script>
   </body>
 </html>
+<!-- ...existing code... -->
