@@ -5,25 +5,55 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>Webスタンプラリー</title>
     <style>
-      :root{--gap:12px;--btn-h:56px;--max:720px}
-      body{font-family:system-ui,-apple-system,Segoe UI,Roboto,"Hiragino Kaku Gothic ProN",Meiryo,sans-serif;margin:0;padding:16px;max-width:var(--max);margin-left:auto;margin-right:auto;background:#fafafa}
-      header{display:flex;flex-direction:column;gap:8px}
-      h1{margin:0;font-size:1.2rem}
-      .controls{display:flex;flex-direction:column;gap:8px;margin-top:8px}
-      button{font-size:1rem;padding:0 12px;height:var(--btn-h);border-radius:10px;border:1px solid #ccc;background:#fff;cursor:pointer}
-      #video{width:100%;height:auto;border-radius:10px;background:#000;border:1px solid #ddd}
-      #stamp-list{display:flex;flex-wrap:wrap;gap:var(--gap);margin-top:12px}
-      .stamp{flex:0 0 45%;min-width:120px;border-radius:8px;padding:8px;background:#fff;border:1px solid #eee;box-shadow:0 1px 2px rgba(0,0,0,.03)}
-      .stamp.collected{background:#e8ffea}
-      .stamp img{width:100%;height:auto;border-radius:6px;display:block}
-      #message,#participant-message{margin:6px 0;color:#333}
-      @media(min-width:600px){.stamp{flex:0 0 30%}}
+      :root { --gap:12px; --btn-h:56px; --max:720px; }
+      body {
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+        margin: 0;
+        padding: 16px;
+        max-width: var(--max);
+        margin-left: auto;
+        margin-right: auto;
+        background: #fafafa;
+      }
+      header { display: flex; flex-direction: column; gap: 8px; }
+      h1 { margin: 0; font-size: 1.2rem; }
+      .controls { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+      button {
+        font-size: 1rem;
+        padding: 0 12px;
+        height: var(--btn-h);
+        border-radius: 10px;
+        border: 1px solid #ccc;
+        background: #fff;
+        cursor: pointer;
+      }
+      #video {
+        width: 100%;
+        height: auto;
+        border-radius: 10px;
+        background: #000;
+        border: 1px solid #ddd;
+      }
+      #stamp-list { display: flex; flex-wrap: wrap; gap: var(--gap); margin-top: 12px; }
+      .stamp {
+        flex: 0 0 45%;
+        min-width: 120px;
+        border-radius: 8px;
+        padding: 8px;
+        background: #fff;
+        border: 1px solid #eee;
+        box-shadow: 0 1px 2px rgba(0,0,0,.03);
+      }
+      .stamp.collected { background: #e8ffea; }
+      .stamp img { width: 100%; height: auto; border-radius: 6px; display: block; }
+      #message, #participant-message { margin: 6px 0; color: #333; }
+      @media(min-width:600px) { .stamp { flex: 0 0 30%; } }
     </style>
   </head>
   <body>
     <header>
       <h1>Webスタンプラリー</h1>
-      <p style="margin:0">書籍の管理コードを先に読み取ると自動で参加者登録されます。</p>
+      <p style="margin:0">URLの管理コードまたは本の管理コードQRで自動参加者登録します。</p>
     </header>
 
     <div class="controls">
@@ -147,17 +177,18 @@
           return;
         }
         allStamps.forEach(stamp => {
-          const id = String(normalizeField(stamp, ['stampId','id','ID']));
+          const id = String(normalizeField(stamp, ['stampId', 'id', 'ID']));
           const item = document.createElement('div');
           item.className = 'stamp' + (collected.includes(id) ? ' collected' : '');
           item.innerHTML = `
-            <strong>${normalizeField(stamp, ['name','Name','名前'])}</strong>
-            <div>${normalizeField(stamp, ['description','Description','説明'])}</div>
-            ${normalizeField(stamp, ['image','Image','画像']) ? `<img src="${normalizeField(stamp, ['image','Image','画像'])}" alt="${normalizeField(stamp, ['name','Name','名前'])}">` : ''}
+            <strong>${normalizeField(stamp, ['name', 'Name', '名前'])}</strong>
+            <div>${normalizeField(stamp, ['description', 'Description', '説明'])}</div>
+            ${normalizeField(stamp, ['image', 'Image', '画像']) ? `<img src="${normalizeField(stamp, ['image', 'Image', '画像'])}" alt="${normalizeField(stamp, ['name', 'Name', '名前'])}">` : ''}
             <div>${collected.includes(id) ? '取得済み' : '未取得'}</div>
           `;
           stampList.appendChild(item);
         });
+
         if (collected.length === allStamps.length && allStamps.length > 0) {
           special.innerHTML = '<h3>おめでとう！ 全て集めました！</h3><img src="https://via.placeholder.com/600x300?text=スペシャル画像" alt="スペシャル画像" style="width:100%;max-width:600px;border-radius:8px;">';
         } else {
@@ -226,13 +257,13 @@
         }
 
         const qrId = parsed;
-        const qrItem = allQrCodes.find(item => String(normalizeField(item, ['qrId','id','ID'])) === qrId);
+        const qrItem = allQrCodes.find(item => String(normalizeField(item, ['qrId', 'id', 'ID'])) === qrId);
         if (!qrItem) {
           message.textContent = 'このQRコードは登録されていません。';
           return;
         }
-        const stampId = String(normalizeField(qrItem, ['stampId','stampID','stamp_id']));
-        const stamp = allStamps.find(item => String(normalizeField(item, ['stampId','id','ID'])) === stampId);
+        const stampId = String(normalizeField(qrItem, ['stampId', 'stampID', 'stamp_id']));
+        const stamp = allStamps.find(item => String(normalizeField(item, ['stampId', 'id', 'ID'])) === stampId);
         if (!stamp) {
           message.textContent = 'このQRコードに対応するスタンプが見つかりません。';
           return;
@@ -245,7 +276,7 @@
         }
 
         const bookCode = getParticipantBookCode(currentParticipantId) || '';
-        message.textContent = `スタンプ「${normalizeField(stamp, ['name','Name','名前'])}」を取得しました。Googleマップを開きます。`;
+        message.textContent = `スタンプ「${normalizeField(stamp, ['name', 'Name', '名前'])}」を取得しました。Googleマップを開きます。`;
         await postHistory({ participantId: currentParticipantId, bookCode, qrId, stampId });
         openMap(stamp);
       }
@@ -283,8 +314,8 @@
       }
 
       function openMap(stamp) {
-        const lat = normalizeField(stamp, ['lat','Lat','latitude','Latitude']);
-        const lng = normalizeField(stamp, ['lng','Lng','longitude','Longitude']);
+        const lat = normalizeField(stamp, ['lat', 'Lat', 'latitude', 'Latitude']);
+        const lng = normalizeField(stamp, ['lng', 'Lng', 'longitude', 'Longitude']);
         if (lat && lng) {
           const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(lat + ',' + lng)}`;
           window.open(url, '_blank');
