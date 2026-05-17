@@ -19,13 +19,13 @@
     #message,#participant-message{margin:6px 0;color:#333}
     #page-image{margin:16px 0}
     #page-image img{width:100%;border-radius:12px;display:block}
-    @media(min-width:600px){.stamp{flex:0 0 30%}}
+    @media(min-width:600px){.stamp{flex:0 0 30%;}}
   </style>
 </head>
 <body>
   <header>
     <h1>Webスタンプラリー</h1>
-    <p style="margin:0">URLの管理コードまたは本の管理コードQRで自動参加者登録します。</p>
+    <p style="margin:0">URLの bookCode と stampId で自動取得しつつ、カメラを使ったQR読み取りもできます。</p>
   </header>
 
   <div class="controls">
@@ -88,7 +88,7 @@
         }
       }
       if (params.stampId) {
-        attemptAutoCollectStamp(params.stampId);
+        await attemptAutoCollectStamp(params.stampId);
       }
     }
 
@@ -210,7 +210,6 @@
     async function handleQrCode(value) {
       message.textContent = 'QRを読み取りました: ' + value;
       const parsed = parseQrValue(value);
-
       const participantMatch = allParticipants.find(p => {
         const id = String(p.participantId || p.id || p.ID || '');
         const bookCode = String(p.bookCode || p.book_code || '');
@@ -222,24 +221,21 @@
         message.textContent = `参加者が設定されました: ${getParticipantName(id)}`;
         return;
       }
-
       if (!currentParticipantId) {
         message.textContent = '参加者が設定されていません。本の管理コードを先に読み取ってください。';
         return;
       }
-
-      collectStampByQr(parsed);
+      await collectStampByQr(parsed);
     }
 
     async function attemptAutoCollectStamp(stampId) {
       if (!stampId || !currentParticipantId) return;
+      const qrItem = allQrCodes.find(item => {
+        return String(normalizeField(item, ['stampId','stampID','stamp_id'])) === stampId
+          || String(normalizeField(item, ['qrId','id','ID'])) === stampId;
+      });
       const stamp = allStamps.find(item => String(normalizeField(item, ['stampId','id','ID'])) === stampId);
-      const qrItem = allQrCodes.find(item => String(normalizeField(item, ['stampId','stampID','stamp_id'])) === stampId || String(normalizeField(item, ['qrId','id','ID'])) === stampId);
       const qrId = qrItem ? String(normalizeField(qrItem, ['qrId','id','ID'])) : stampId;
-      if (!stamp && !qrItem) {
-        message.textContent = `スタンプID「${stampId}」は登録されていません。`;
-        return;
-      }
       await collectStamp(qrId, stampId, stamp || {});
     }
 
@@ -276,7 +272,7 @@
     function parseQrValue(value) {
       try {
         const url = new URL(value);
-        return url.searchParams.get('bookCode') || url.searchParams.get('qrId') || url.searchParams.get('id') || url.pathname.split('/').pop();
+        return url.searchParams.get('bookCode') || url.searchParams.get('qrId') || url.searchParams.get('stampId') || url.searchParams.get('id') || url.pathname.split('/').pop();
       } catch {
         return value;
       }
@@ -291,7 +287,7 @@
           stampId: params.get('stampId') || ''
         };
       } catch {
-        return { bookCode:'',participantId:'',stampId:'' };
+        return { bookCode:'', participantId:'', stampId:'' };
       }
     }
 
